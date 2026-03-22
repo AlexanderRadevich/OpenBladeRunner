@@ -173,12 +173,16 @@ IN;PA;VS<speed>;FS<force>;PU<x>,<y>;PD<x>,<y>;PD<x>,<y>;...PU<x>,<y>;
 
 ### Coordinate System
 - **Units**: 0.025mm per unit (40 units = 1mm), standard HP-GL resolution (1016 DPI)
-- **X axis**: Cutting head position (left-right across the paper)
-- **Y axis**: Paper feed direction
-- **Paper feeding**: The plotter automatically feeds paper when HP-GL PU/PD commands
-  reference Y positions beyond the current paper position. No separate feed command needed.
+- **HP-GL X axis**: Paper roller (feed direction) — paper loads from the **back** of the device
+- **HP-GL Y axis**: Cutting head (horizontal movement, left-right)
+- **Axis swap required**: Standard HPGL files use X=horizontal, Y=vertical. This plotter's
+  firmware swaps them: X=roller, Y=head. The software must swap X/Y before sending.
+- **Paper feeding**: The plotter automatically feeds paper via the roller when HP-GL commands
+  reference X positions. Paper enters from the **back** of the device.
+- **Working area**: Must be expanded before cutting using BB 0x12 command if coordinates
+  exceed the default 2000x2000 range. The plotter won't cut outside the configured area.
 - **A4 paper**: 8400 x 11880 units (210mm x 297mm)
-- **Working area from query 0x12**: 2000 x 2000 units (50mm x 50mm)
+- **Default working area from query 0x12**: 2000 x 2000 units (50mm x 50mm)
 
 ### Important: Command 0x12 (BB type) is NOT a move command!
 `BB 0012 0400 [X_LE16] [Y_LE16]` **sets the working area dimensions**, not the head position.

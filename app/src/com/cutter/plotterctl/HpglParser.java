@@ -55,10 +55,14 @@ public class HpglParser {
                         int x = Integer.parseInt(parts[i].trim());
                         int y = Integer.parseInt(parts[i + 1].trim());
                         points.add(new PathPoint(pd, x, y));
-                        if (x < minX) minX = x;
-                        if (y < minY) minY = y;
-                        if (x > maxX) maxX = x;
-                        if (y > maxY) maxY = y;
+                        // Only use PD (cut) points for bounding box
+                        // so PU return moves (e.g. PU0,0) don't inflate the design size
+                        if (pd) {
+                            if (x < minX) minX = x;
+                            if (y < minY) minY = y;
+                            if (x > maxX) maxX = x;
+                            if (y > maxY) maxY = y;
+                        }
                     } catch (NumberFormatException e) {
                         // skip bad coords
                     }
@@ -103,6 +107,69 @@ public class HpglParser {
         if (!injected) {
             // Prepend
             return "IN;PA;VS" + speed + ";FS" + force + ";" + sb.toString();
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Swap X and Y in all HPGL coordinates.
+     * Needed when plotter axes are: HPGL_X=roller, HPGL_Y=head
+     * but the file was authored with: X=head, Y=roller.
+     */
+    public static String swapAxes(String hpgl) {
+        StringBuilder sb = new StringBuilder();
+        String[] cmds = hpgl.split(";");
+        for (String cmd : cmds) {
+            cmd = cmd.trim();
+            if (cmd.isEmpty()) continue;
+            if (cmd.startsWith("PU") || cmd.startsWith("PD")) {
+                String prefix = cmd.substring(0, 2);
+                String coords = cmd.substring(2);
+                String[] parts = coords.split(",");
+                StringBuilder newCmd = new StringBuilder(prefix);
+                for (int i = 0; i + 1 < parts.length; i += 2) {
+                    if (i > 0) newCmd.append(",");
+                    // Swap: old X becomes new Y, old Y becomes new X
+                    newCmd.append(parts[i + 1].trim()).append(",").append(parts[i].trim());
+                }
+                sb.append(newCmd).append(";");
+            } else {
+                sb.append(cmd).append(";");
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Apply X/Y offset to all coordinates in HPGL data.
+     * Offset is in HPGL units (40 units/mm).
+     */
+    public static String applyOffset(String hpgl, int dx, int dy) {
+        StringBuilder sb = new StringBuilder();
+        String[] cmds = hpgl.split(";");
+        for (String cmd : cmds) {
+            cmd = cmd.trim();
+            if (cmd.isEmpty()) continue;
+            if (cmd.startsWith("PU") || cmd.startsWith("PD")) {
+                String prefix = cmd.substring(0, 2);
+                String coords = cmd.substring(2);
+                String[] parts = coords.split(",");
+                StringBuilder newCmd = new StringBuilder(prefix);
+                for (int i = 0; i + 1 < parts.length; i += 2) {
+                    try {
+                        int x = Integer.parseInt(parts[i].trim()) + dx;
+                        int y = Integer.parseInt(parts[i + 1].trim()) + dy;
+                        if (i > 0) newCmd.append(",");
+                        newCmd.append(x).append(",").append(y);
+                    } catch (NumberFormatException e) {
+                        if (i > 0) newCmd.append(",");
+                        newCmd.append(parts[i]).append(",").append(parts[i + 1]);
+                    }
+                }
+                sb.append(newCmd).append(";");
+            } else {
+                sb.append(cmd).append(";");
+            }
         }
         return sb.toString();
     }

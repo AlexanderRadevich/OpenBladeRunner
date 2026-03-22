@@ -151,6 +151,12 @@ public class PlotterProtocol {
         return bytesToHex(packet);
     }
 
+    /** Send without any synchronization - for emergency stop. */
+    public void sendDirect(byte[] packet) throws Exception {
+        out.write(packet);
+        out.flush();
+    }
+
     /**
      * Read response with timeout using blocking read on a daemon thread.
      */

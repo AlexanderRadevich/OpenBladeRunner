@@ -30,6 +30,8 @@ public class WebServer {
     public void setListener(Listener l) { this.listener = l; }
 
     private void log(String msg) {
+        // Log to both the UI listener and Android logcat
+        try { android.util.Log.d("OpenBladeRunner", msg); } catch (Exception e) {}
         if (listener != null) listener.onLog(msg);
     }
 
@@ -232,15 +234,19 @@ public class WebServer {
             return;
         }
 
-        // Parse speed/force/feed from body
+        // Parse speed/force/feed/offset from body
         int speed = job.getSpeed();
         int force = job.getForce();
         int feed = 200; // default 200mm paper feed
+        int offsetX = 0; // mm
+        int offsetY = 0; // mm
         if (body != null && body.length > 0) {
             String json = new String(body, "UTF-8");
             speed = jsonInt(json, "speed", speed);
             force = jsonInt(json, "force", force);
             feed = jsonInt(json, "feed", feed);
+            offsetX = jsonInt(json, "offsetX", offsetX);
+            offsetY = jsonInt(json, "offsetY", offsetY);
         }
         job.setSpeed(speed);
         job.setForce(force);
@@ -248,68 +254,59 @@ public class WebServer {
         // Rewrite HPGL with user parameters
         String rewritten = HpglParser.rewrite(hpgl, speed, force);
 
-        // Prepend paper feed: PU move to feed paper before cutting
-        // Insert after IN;PA;VS;FS; - find the first PU/PD and insert a feed PU before it
-        if (feed > 0) {
-            int feedUnits = feed * 40; // mm to HPGL units (40 units/mm = 1016 DPI)
-            String feedCmd = "PU0," + feedUnits + ";";
-            // Insert feed command before the first PU or PD in the data
-            int firstMove = rewritten.indexOf("PU");
-            // Skip the VS/FS injected ones - find PU that has coordinates
-            int searchFrom = 0;
-            while (firstMove >= 0) {
-                // Check if this PU has digits after it
-                if (firstMove + 2 < rewritten.length() && Character.isDigit(rewritten.charAt(firstMove + 2))) {
-                    break;
-                }
-                searchFrom = firstMove + 2;
-                firstMove = rewritten.indexOf("PU", searchFrom);
-            }
-            if (firstMove < 0) firstMove = rewritten.indexOf("PD");
-            if (firstMove >= 0) {
-                rewritten = rewritten.substring(0, firstMove) + feedCmd + rewritten.substring(firstMove);
-            }
+        // Swap X/Y axes: HPGL files use X=horizontal Y=vertical,
+        // but this plotter uses X=roller(feed) Y=head(horizontal).
+        rewritten = HpglParser.swapAxes(rewritten);
+
+        // After swap: HPGL X = roller (paper feed), HPGL Y = head (horizontal)
+        // Feed adds to X (roller direction), offsetX shifts Y (head), offsetY shifts X (roller)
+        int totalDx = (feed + offsetY) * 40;  // roller: feed + vertical offset
+        int totalDy = offsetX * 40;            // head: horizontal offset
+        if (totalDx != 0 || totalDy != 0) {
+            rewritten = HpglParser.applyOffset(rewritten, totalDx, totalDy);
         }
+
+        log("Cut HPGL (first 200 chars): " + rewritten.substring(0, Math.min(200, rewritten.length())));
+        log("Feed=" + feed + "mm offX=" + offsetX + "mm offY=" + offsetY + "mm → dx=" + totalDx + " dy=" + totalDy);
 
         sendJson(out, 200, "{\"ok\":true}");
 
-        // Start cutting in background
         final String cutData = rewritten;
         new Thread(() -> executeCut(cutData), "CutThread").start();
     }
 
-    /** Public stop method - callable from Android UI */
+    /** Public stop method - callable from Android UI and web API.
+     *  Does NOT use synchronized - writes directly to the serial stream
+     *  to bypass the cutting thread which may be holding the lock. */
     public void stopCut() {
-        if (protocol == null) return;
+        // Set state FIRST so cutting thread breaks out of its loop
+        job.setState(CutJob.State.IDLE);
+        log("EMERGENCY STOP triggered");
+
+        if (protocol == null) {
+            log("No protocol - can't send stop");
+            return;
+        }
         try {
-            byte[] pkt = PlotterProtocol.buildCutPacket(0x40, null);
-            synchronized (protocol) {
-                protocol.send(pkt);
-            }
-            job.setState(CutJob.State.IDLE);
-            log("Cut stopped");
+            // Send stop command CC 0040 directly (no lock)
+            byte[] stopPkt = PlotterProtocol.buildCutPacket(0x40, null);
+            log("Sending CC0040 stop: " + PlotterProtocol.bytesToHex(stopPkt));
+            protocol.sendDirect(stopPkt);
+
+            // Also send reset knife BB 001B as fallback
+            byte[] resetPkt = PlotterProtocol.buildSet(0x1B, null);
+            log("Sending BB001B reset: " + PlotterProtocol.bytesToHex(resetPkt));
+            protocol.sendDirect(resetPkt);
+
+            log("Stop commands sent");
         } catch (Exception e) {
             log("Stop error: " + e.getMessage());
         }
     }
 
     private void handleStop(OutputStream out) throws Exception {
-        if (protocol == null) {
-            sendJson(out, 500, "{\"ok\":false,\"error\":\"Not connected\"}");
-            return;
-        }
-        try {
-            // Send stop command CC 0040
-            byte[] pkt = PlotterProtocol.buildCutPacket(0x40, null);
-            synchronized (protocol) {
-                protocol.send(pkt);
-            }
-            job.setState(CutJob.State.IDLE);
-            log("Cut stopped");
-            sendJson(out, 200, "{\"ok\":true}");
-        } catch (Exception e) {
-            sendJson(out, 500, "{\"ok\":false,\"error\":\"" + esc(e.getMessage()) + "\"}");
-        }
+        stopCut();
+        sendJson(out, 200, "{\"ok\":true}");
     }
 
     private void executeCut(String hpglData) {
@@ -320,6 +317,25 @@ public class WebServer {
             if (protocol == null) {
                 throw new Exception("Plotter not connected");
             }
+
+            // First, expand the plotter's working area to fit the design + offset.
+            // Command BB 0012 sets working area as (X_LE16, Y_LE16) in HPGL units.
+            // Parse max coordinates from the final HPGL to determine required area.
+            HpglParser.ParseResult bounds = HpglParser.parse(hpglData);
+            int needX = Math.max(bounds.maxX + 400, 12000); // roller range + margin
+            int needY = Math.max(bounds.maxY + 400, 12000); // head range + margin
+            log("Setting working area to " + needX + "x" + needY + " units (" + (needX/40) + "x" + (needY/40) + "mm)");
+            byte[] areaData = new byte[]{
+                (byte)(needX & 0xFF), (byte)((needX >> 8) & 0xFF),
+                (byte)(needY & 0xFF), (byte)((needY >> 8) & 0xFF)
+            };
+            synchronized (protocol) {
+                byte[] areaPkt = PlotterProtocol.buildSet(0x12, areaData);
+                protocol.send(areaPkt);
+                byte[] areaResp = protocol.readResponse(2000);
+                log("Working area set: " + PlotterProtocol.bytesToHex(areaResp));
+            }
+            Thread.sleep(200);
 
             log("Preparing cut data...");
             byte[] payload = hpglData.getBytes("US-ASCII");
