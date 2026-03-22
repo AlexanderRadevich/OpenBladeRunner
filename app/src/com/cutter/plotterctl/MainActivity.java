@@ -61,44 +61,60 @@ public class MainActivity extends Activity {
         return getResources().getIdentifier(name, "id", getPackageName());
     }
 
-    /** Move roller using direct serial writes (no lock - works even during cut). */
-    private void moveRoller(int delta) {
+    /**
+     * Move roller using the cut protocol with a PU-only HPGL command.
+     * Uses axis swap + negative X (same as cutting) so roller direction is correct.
+     * delta in mm: positive = load (pull paper in from back), negative = eject.
+     */
+    private void moveRoller(int deltaMm) {
         if (protocol == null) { log("Not connected"); return; }
-        log("Roller: " + (delta > 0 ? "LOAD" : "EJECT"));
+        log("Roller: " + (deltaMm > 0 ? "LOAD " : "EJECT ") + Math.abs(deltaMm) + "mm");
         new Thread(() -> {
             try {
-                if (delta > 0) {
-                    // BB 0047 = load/feed (from original app g0 method)
-                    byte[] pkt = PlotterProtocol.buildSet(0x47, null);
-                    log("TX 0047: " + PlotterProtocol.bytesToHex(pkt));
-                    protocol.sendDirect(pkt);
+                // Build HPGL with just a PU move.
+                // In HPGL file coords: Y = paper direction (before axis swap).
+                // After swap: X = roller. Negative X = inward.
+                // So we use Y in the HPGL, swap makes it X, offset negates it.
+                int units = Math.abs(deltaMm) * 40;
+                String hpgl;
+                if (deltaMm > 0) {
+                    // Load: move paper inward — use negative X after swap
+                    // In pre-swap HPGL: PU0,<dist> → after swap: PU<dist>,0 → after negate: PU-<dist>,0
+                    hpgl = "IN;PA;PU0," + units + ";";
                 } else {
-                    // BB 0026 = home/eject
-                    byte[] pkt = PlotterProtocol.buildSet(0x26, null);
-                    log("TX 0026: " + PlotterProtocol.bytesToHex(pkt));
-                    protocol.sendDirect(pkt);
+                    // Eject: move paper outward — positive X after swap
+                    // Just go toward origin
+                    hpgl = "IN;PA;PU0,0;";
                 }
-                log("Command sent");
+
+                // Apply same transforms as cutting: swap axes, negate X
+                hpgl = HpglParser.swapAxes(hpgl);
+                hpgl = HpglParser.applyOffset(hpgl, -units, 0); // negate X for inward direction
+
+                log("HPGL: " + hpgl);
+                byte[] payload = hpgl.getBytes("US-ASCII");
+                sendCutData(payload);
             } catch (Exception e) {
                 log("Roller error: " + e.getMessage());
             }
         }).start();
     }
 
-    /** Send home/reset command using direct writes. */
+    /** Send home: reset knife + eject via cut protocol. */
     private void sendHome() {
         if (protocol == null) { log("Not connected"); return; }
-        log("HOME");
+        log("HOME - reset knife");
         new Thread(() -> {
             try {
-                byte[] pkt1 = PlotterProtocol.buildSet(0x1B, null);
-                log("TX reset: " + PlotterProtocol.bytesToHex(pkt1));
-                protocol.sendDirect(pkt1);
+                // Reset knife
+                byte[] pkt = PlotterProtocol.buildSet(0x1B, null);
+                protocol.sendDirect(pkt);
                 Thread.sleep(500);
-                byte[] pkt2 = PlotterProtocol.buildSet(0x26, null);
-                log("TX home: " + PlotterProtocol.bytesToHex(pkt2));
-                protocol.sendDirect(pkt2);
-                log("Home sent");
+                // Send a PU0,0 via cut protocol to return to origin
+                String hpgl = "IN;PA;PU0,0;";
+                byte[] payload = hpgl.getBytes("US-ASCII");
+                sendCutData(payload);
+                log("Home done");
             } catch (Exception e) {
                 log("Home error: " + e.getMessage());
             }
