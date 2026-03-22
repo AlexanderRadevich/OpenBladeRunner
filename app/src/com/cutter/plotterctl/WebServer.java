@@ -237,7 +237,7 @@ public class WebServer {
         // Parse speed/force/feed/offset from body
         int speed = job.getSpeed();
         int force = job.getForce();
-        int feed = 200; // default 200mm paper feed
+        int feed = 50; // default 50mm paper feed
         int offsetX = 0; // mm
         int offsetY = 0; // mm
         if (body != null && body.length > 0) {
@@ -251,23 +251,24 @@ public class WebServer {
         job.setSpeed(speed);
         job.setForce(force);
 
-        // Rewrite HPGL with user parameters
+        // Rewrite HPGL with user parameters (VS/FS)
         String rewritten = HpglParser.rewrite(hpgl, speed, force);
 
-        // Swap X/Y axes: HPGL files use X=horizontal Y=vertical,
-        // but this plotter uses X=roller(feed) Y=head(horizontal).
+        // Axis swap: HPGL files use X=horizontal Y=vertical, but this plotter's
+        // firmware uses X=roller(feed) Y=head(horizontal). Swap before sending.
+        // This was confirmed by the one successful 50x50mm physical cut.
         rewritten = HpglParser.swapAxes(rewritten);
 
-        // After swap: HPGL X = roller (paper feed), HPGL Y = head (horizontal)
-        // Feed adds to X (roller direction), offsetX shifts Y (head), offsetY shifts X (roller)
-        int totalDx = (feed + offsetY) * 40;  // roller: feed + vertical offset
+        // After swap: X=roller(paper feed from back), Y=head(horizontal)
+        // Negative X = pulls paper IN from back. Positive X = pushes out back.
+        int totalDx = -(feed + offsetY) * 40;  // roller: negative = load inward
         int totalDy = offsetX * 40;            // head: horizontal offset
         if (totalDx != 0 || totalDy != 0) {
             rewritten = HpglParser.applyOffset(rewritten, totalDx, totalDy);
         }
 
         log("Cut HPGL (first 200 chars): " + rewritten.substring(0, Math.min(200, rewritten.length())));
-        log("Feed=" + feed + "mm offX=" + offsetX + "mm offY=" + offsetY + "mm → dx=" + totalDx + " dy=" + totalDy);
+        log("Feed=" + feed + "mm offX=" + offsetX + "mm offY=" + offsetY + "mm dx=" + totalDx + " dy=" + totalDy);
 
         sendJson(out, 200, "{\"ok\":true}");
 
@@ -318,24 +319,11 @@ public class WebServer {
                 throw new Exception("Plotter not connected");
             }
 
-            // First, expand the plotter's working area to fit the design + offset.
-            // Command BB 0012 sets working area as (X_LE16, Y_LE16) in HPGL units.
-            // Parse max coordinates from the final HPGL to determine required area.
-            HpglParser.ParseResult bounds = HpglParser.parse(hpglData);
-            int needX = Math.max(bounds.maxX + 400, 12000); // roller range + margin
-            int needY = Math.max(bounds.maxY + 400, 12000); // head range + margin
-            log("Setting working area to " + needX + "x" + needY + " units (" + (needX/40) + "x" + (needY/40) + "mm)");
-            byte[] areaData = new byte[]{
-                (byte)(needX & 0xFF), (byte)((needX >> 8) & 0xFF),
-                (byte)(needY & 0xFF), (byte)((needY >> 8) & 0xFF)
-            };
+            // Drain any stale serial data from previous operations
+            log("Flushing serial buffer...");
             synchronized (protocol) {
-                byte[] areaPkt = PlotterProtocol.buildSet(0x12, areaData);
-                protocol.send(areaPkt);
-                byte[] areaResp = protocol.readResponse(2000);
-                log("Working area set: " + PlotterProtocol.bytesToHex(areaResp));
+                protocol.drain();
             }
-            Thread.sleep(200);
 
             log("Preparing cut data...");
             byte[] payload = hpglData.getBytes("US-ASCII");

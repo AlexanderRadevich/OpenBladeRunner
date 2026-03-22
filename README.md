@@ -96,7 +96,10 @@ adb shell am start -n com.cutter.plotterctl/.MainActivity
 1. Connect the plotter to your WiFi network (via Android Settings)
 2. The app shows the plotter's IP address on screen (e.g., `http://192.168.1.100`)
 3. Open that URL with `:8080` in any browser (e.g., `http://192.168.1.100:8080`)
-4. Upload an HPGL file, adjust speed/force/paper feed, and click **Start Cutting**
+4. **Insert paper from the back** of the plotter
+5. Upload an HPGL file, set paper size/material preset, adjust speed/force/feed
+6. Click **Start Cutting** — the roller will load the paper inward and begin cutting
+7. Use **EMERGENCY STOP** on the device screen or **Stop** in the web UI if needed
 
 ## HPGL File Format
 
@@ -112,6 +115,10 @@ The plotter accepts standard HPGL (HP Graphics Language) commands:
 | `PD<x>,<y>;` | Pen Down — move and cut |
 
 Coordinates are in **0.025mm units** (40 units = 1mm, standard HP-GL 1016 DPI). For example, 2000 = 50mm, 4000 = 100mm.
+
+> **Note:** The plotter's firmware swaps X/Y axes — the software handles this automatically.
+> Paper is inserted from the **back** of the device. The `PU0,0` return-to-origin commonly
+> found at the end of HPGL files is automatically stripped to prevent paper ejection.
 
 ### Sample Files
 

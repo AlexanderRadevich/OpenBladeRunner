@@ -83,30 +83,84 @@ public class HpglParser {
 
     /**
      * Rewrite HPGL to inject speed and force after IN;PA; and strip existing VS/FS.
+     * Also strips the trailing PU return-to-origin (e.g. PU0,0) which would eject the paper.
      */
     public static String rewrite(String hpgl, int speed, int force) {
         StringBuilder sb = new StringBuilder();
         boolean injected = false;
         String[] cmds = hpgl.split(";");
-        for (String cmd : cmds) {
-            cmd = cmd.trim();
+
+        // Find the last PU command index - we'll skip it if it returns near origin
+        int lastPuIdx = -1;
+        for (int i = cmds.length - 1; i >= 0; i--) {
+            String c = cmds[i].trim();
+            if (c.startsWith("PU")) { lastPuIdx = i; break; }
+        }
+
+        for (int i = 0; i < cmds.length; i++) {
+            String cmd = cmds[i].trim();
             if (cmd.isEmpty()) continue;
             // Skip existing VS/FS
             if (cmd.startsWith("VS") || cmd.startsWith("FS")) continue;
-            sb.append(cmd).append(";");
-            // Inject after PA or IN
-            if (!injected && (cmd.equals("PA") || cmd.equals("IN"))) {
-                // Check if next is PA
-                if (cmd.equals("PA")) {
-                    sb.append("VS").append(speed).append(";");
-                    sb.append("FS").append(force).append(";");
-                    injected = true;
+            // Skip trailing PU that returns to origin (ejects paper)
+            if (i == lastPuIdx && cmd.startsWith("PU")) {
+                String coords = cmd.substring(2);
+                String[] parts = coords.split(",");
+                if (parts.length >= 2) {
+                    try {
+                        int x = Integer.parseInt(parts[0].trim());
+                        int y = Integer.parseInt(parts[1].trim());
+                        // Skip if it goes to near-origin (would eject paper)
+                        if (x <= 100 && y <= 100) {
+                            continue;
+                        }
+                    } catch (NumberFormatException e) {}
                 }
+            }
+            sb.append(cmd).append(";");
+            // Inject after PA
+            if (!injected && cmd.equals("PA")) {
+                sb.append("VS").append(speed).append(";");
+                sb.append("FS").append(force).append(";");
+                injected = true;
             }
         }
         if (!injected) {
-            // Prepend
             return "IN;PA;VS" + speed + ";FS" + force + ";" + sb.toString();
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Negate all Y coordinates in HPGL.
+     * Flips the roller direction so paper feeds inward (from back) instead of outward (front).
+     */
+    public static String negateY(String hpgl) {
+        StringBuilder sb = new StringBuilder();
+        String[] cmds = hpgl.split(";");
+        for (String cmd : cmds) {
+            cmd = cmd.trim();
+            if (cmd.isEmpty()) continue;
+            if (cmd.startsWith("PU") || cmd.startsWith("PD")) {
+                String prefix = cmd.substring(0, 2);
+                String coords = cmd.substring(2);
+                String[] parts = coords.split(",");
+                StringBuilder newCmd = new StringBuilder(prefix);
+                for (int i = 0; i + 1 < parts.length; i += 2) {
+                    try {
+                        int x = Integer.parseInt(parts[i].trim());
+                        int y = -Integer.parseInt(parts[i + 1].trim()); // negate Y
+                        if (i > 0) newCmd.append(",");
+                        newCmd.append(x).append(",").append(y);
+                    } catch (NumberFormatException e) {
+                        if (i > 0) newCmd.append(",");
+                        newCmd.append(parts[i]).append(",").append(parts[i + 1]);
+                    }
+                }
+                sb.append(newCmd).append(";");
+            } else {
+                sb.append(cmd).append(";");
+            }
         }
         return sb.toString();
     }

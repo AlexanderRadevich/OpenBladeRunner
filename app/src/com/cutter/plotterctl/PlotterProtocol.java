@@ -157,6 +157,19 @@ public class PlotterProtocol {
         out.flush();
     }
 
+    /** Drain any pending bytes from the input stream. */
+    public void drain() {
+        // Keep reading with short timeouts until nothing comes back
+        for (int attempt = 0; attempt < 5; attempt++) {
+            try {
+                byte[] tmp = readResponse(300);
+                if (tmp == null) break; // nothing to drain
+            } catch (Exception e) {
+                break;
+            }
+        }
+    }
+
     /**
      * Read response with timeout using blocking read on a daemon thread.
      */
