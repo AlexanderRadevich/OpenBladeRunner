@@ -111,7 +111,7 @@ The plotter accepts standard HPGL (HP Graphics Language) commands:
 | `PU<x>,<y>;` | Pen Up — move without cutting |
 | `PD<x>,<y>;` | Pen Down — move and cut |
 
-Coordinates are in **0.1mm units** (100 = 10mm, 1000 = 100mm).
+Coordinates are in **0.025mm units** (40 units = 1mm, standard HP-GL 1016 DPI). For example, 2000 = 50mm, 4000 = 100mm.
 
 ### Sample Files
 

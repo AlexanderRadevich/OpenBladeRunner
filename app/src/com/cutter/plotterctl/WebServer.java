@@ -251,7 +251,7 @@ public class WebServer {
         // Prepend paper feed: PU move to feed paper before cutting
         // Insert after IN;PA;VS;FS; - find the first PU/PD and insert a feed PU before it
         if (feed > 0) {
-            int feedUnits = feed * 10; // mm to 0.1mm units
+            int feedUnits = feed * 40; // mm to HPGL units (40 units/mm = 1016 DPI)
             String feedCmd = "PU0," + feedUnits + ";";
             // Insert feed command before the first PU or PD in the data
             int firstMove = rewritten.indexOf("PU");

@@ -74,7 +74,7 @@ All queried successfully with valid SHA-256 checksums.
 |-----|-------------------|----------------|
 | 0x10 | `00 00 64 00` | 100 - pressure/force setting |
 | 0x11 | `00 00 A0 00` | 160 - media width (mm?) |
-| 0x12 | `00 00 D0 07 D0 07` | 2000, 2000 - working area XY (0.1mm units) |
+| 0x12 | `00 00 D0 07 D0 07` | 2000, 2000 - working area XY (HPGL units, 40u/mm = 50x50mm) |
 | 0x13 | `00 00 36 FF D4 05 4D 46 39 34 12 79 08 43 00 00 00 00` | Device info string |
 | 0x18 | `00 00 01` | Auto mode flag |
 | 0x19 | `00 00 CF 00` | 207 - print width setting |
@@ -172,13 +172,13 @@ IN;PA;VS<speed>;FS<force>;PU<x>,<y>;PD<x>,<y>;PD<x>,<y>;...PU<x>,<y>;
 | `PD<x>,<y>;` | Pen Down - move WITH cutting |
 
 ### Coordinate System
-- **Units**: 0.1mm per unit (10 units = 1mm)
+- **Units**: 0.025mm per unit (40 units = 1mm), standard HP-GL resolution (1016 DPI)
 - **X axis**: Cutting head position (left-right across the paper)
 - **Y axis**: Paper feed direction
 - **Paper feeding**: The plotter automatically feeds paper when HP-GL PU/PD commands
   reference Y positions beyond the current paper position. No separate feed command needed.
-- **A4 paper**: 2100 x 2970 units (210mm x 297mm)
-- **Working area from query 0x12**: 2000 x 2000 units (200mm x 200mm)
+- **A4 paper**: 8400 x 11880 units (210mm x 297mm)
+- **Working area from query 0x12**: 2000 x 2000 units (50mm x 50mm)
 
 ### Important: Command 0x12 (BB type) is NOT a move command!
 `BB 0012 0400 [X_LE16] [Y_LE16]` **sets the working area dimensions**, not the head position.
