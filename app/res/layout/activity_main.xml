@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#1a1a2e"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="PlotterCtl Web Server"
+        android:textSize="18sp"
+        android:textColor="#00FFFF"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvUrl"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Starting..."
+        android:textSize="16sp"
+        android:textColor="#FFFFFF"
+        android:paddingTop="8dp" />
+
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Serial: Connecting..."
+        android:textSize="13sp"
+        android:textColor="#AAAAAA"
+        android:paddingTop="4dp" />
+
+    <Button
+        android:id="@+id/btnStop"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="EMERGENCY STOP"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
+        android:background="#D32F2F"
+        android:layout_marginTop="8dp" />
+
+    <ScrollView
+        android:id="@+id/scrollLog"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:background="#111"
+        android:padding="6dp"
+        android:layout_marginTop="8dp">
+
+        <TextView
+            android:id="@+id/tvLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="10sp"
+            android:textColor="#00FF00"
+            android:fontFamily="monospace" />
+
+    </ScrollView>
+
+</LinearLayout>

@@ -1,0 +1,26 @@
+# Build outputs
+app/build/
+*.apk
+*.class
+*.dex
+
+# Keystore (don't commit signing keys)
+*.keystore
+*.jks
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temp
+*.tmp
+*.log
