@@ -141,7 +141,7 @@ OpenBladeRunner
 │   ├── AndroidManifest.xml
 │   ├── build.sh                          # Build-only script (bash)
 │   ├── libs/armeabi-v7a/
-│   │   └── libserial_port.so             # Native JNI serial port library
+│   │   └── libserial_port.so             # Native JNI serial port library (android-serialport-api)
 │   ├── res/
 │   │   ├── layout/activity_main.xml      # Android UI (status + stop button)
 │   │   └── values/strings.xml
@@ -219,9 +219,13 @@ Contributions welcome! Areas that could use help:
 - **More plotter models** — test with other MyScreen or compatible plotters
 - **Material presets** — predefined speed/force settings for common materials (vinyl, paper, cardstock)
 
+## Legal Notice
+
+This project was developed through reverse engineering for **interoperability purposes**, as permitted under [EU Directive 2009/24/EC, Article 6](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=celex%3A32009L0024). No original source code from the manufacturer's application was copied or redistributed. The implementation is a clean-room rewrite based on observed protocol behavior.
+
 ## Disclaimer
 
-This project is not affiliated with MyScreen or any plotter manufacturer. Use at your own risk. The serial protocol was reverse-engineered for interoperability purposes. Always supervise the plotter during operation and use the emergency stop if anything goes wrong.
+This project is not affiliated with MyScreen or any plotter manufacturer. Use at your own risk. Always supervise the plotter during operation and use the emergency stop if anything goes wrong.
 
 ## License
 
