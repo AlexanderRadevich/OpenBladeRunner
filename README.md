@@ -19,7 +19,13 @@ Runs a web server directly on the plotter's Android board. Connect your plotter 
 
 ## Screenshots
 
-*Coming soon*
+**Web UI** — upload HPGL files, preview paths, adjust settings, and cut from any browser:
+
+![Web UI](docs/images/web-ui.jpg)
+
+**Device Screen** — shows server URL, serial connection status, and emergency stop button:
+
+![Device Screen](docs/images/device-screen.png)
 
 ## Supported Hardware
 
